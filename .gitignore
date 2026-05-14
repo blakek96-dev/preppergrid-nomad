@@ -41,3 +41,6 @@ admin/public/assets
 
 # Admin specific development files
 admin/storage
+
+# macOS installer generated env
+install/compose.macos.env
