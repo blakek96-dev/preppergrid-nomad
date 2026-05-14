@@ -221,6 +221,8 @@ download_helper_scripts() {
   local stop_script_path="${NOMAD_DIR}/stop_preppergrid_nomad_macos.sh"
   local update_script_path="${NOMAD_DIR}/update_preppergrid_nomad_macos.sh"
   local plist_path="${NOMAD_DIR}/com.preppergrid.nomad.agent.plist"
+  local launch_agents_dir="/Users/$USER/Library/LaunchAgents"
+  local launch_agent_path="${launch_agents_dir}/com.preppergrid.nomad.agent.plist"
 
   echo -e "${YELLOW}#${RESET} Installing helper scripts...\\n"
   for required_file in "$MACOS_START_SOURCE" "$MACOS_STOP_SOURCE" "$MACOS_UPDATE_SOURCE" "$MACOS_PLIST_SOURCE"; do
@@ -240,8 +242,11 @@ download_helper_scripts() {
   run_with_optional_sudo chmod +x "$update_script_path"
 
   sed "s|REPLACE_WITH_USERNAME|$USER|g" "$MACOS_PLIST_SOURCE" > "$plist_path"
+  mkdir -p "$launch_agents_dir"
+  sed "s|REPLACE_WITH_USERNAME|$USER|g" "$MACOS_PLIST_SOURCE" > "$launch_agent_path"
 
   echo -e "${GREEN}#${RESET} Helper scripts installed successfully to $NOMAD_DIR.\\n"
+  echo -e "${GREEN}#${RESET} launchd agent installed to $launch_agent_path.\\n"
 }
 
 start_management_containers() {

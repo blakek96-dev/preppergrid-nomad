@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.preppergrid.nomad.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/REPLACE_WITH_USERNAME/.preppergrid-nomad/start_preppergrid_nomad_macos.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/REPLACE_WITH_USERNAME/.preppergrid-nomad/storage/logs/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/REPLACE_WITH_USERNAME/.preppergrid-nomad/storage/logs/launchd-error.log</string>
+</dict>
+</plist>
