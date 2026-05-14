@@ -117,3 +117,37 @@ platform: linux/amd64
 ```
 
 Docker Desktop must have Rosetta support enabled for amd64 containers on Apple Silicon.
+
+## Building ARM64 Image Locally
+
+The repository includes local ARM64 build helpers for Apple Silicon and other ARM64-capable Docker Buildx environments.
+
+Build the local image:
+
+```bash
+scripts/build-arm64.sh
+```
+
+The script builds the repository root Docker context for `linux/arm64` and tags the result as:
+
+```text
+preppergrid-nomad:local-arm64
+preppergrid-nomad:local-arm64-$(git describe --tags --always)
+```
+
+On success, it prints the image ID and size from Docker inspect. It also verifies the built image architecture is `arm64`.
+
+To publish the image to GitHub Container Registry, provide GitHub Actions-style credentials in the environment:
+
+```bash
+GITHUB_ACTOR=your-github-username GITHUB_TOKEN=your-token scripts/build-and-push.sh
+```
+
+The push script logs in to `ghcr.io`, re-tags the local ARM64 image, and publishes:
+
+```text
+ghcr.io/blakek96-dev/preppergrid-nomad:arm64-latest
+ghcr.io/blakek96-dev/preppergrid-nomad:arm64-$(git describe --tags --always)
+```
+
+Do not commit generated auth files, Docker credentials, build logs, or temporary artifacts.
