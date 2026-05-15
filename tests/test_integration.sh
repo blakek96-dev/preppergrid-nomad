@@ -113,7 +113,7 @@ services:
       retries: 6
 EOF
 
-assert_command "integration compose stack starts" docker compose -p "$PROJECT_NAME" -f "$TEMP_COMPOSE" up -d
+assert_command "integration compose stack starts" docker compose -p "$PROJECT_NAME" --env-file "$TEMP_ENV" -f "$TEMP_COMPOSE" up -d
 
 health_ok=0
 start_time="$(date +%s)"
