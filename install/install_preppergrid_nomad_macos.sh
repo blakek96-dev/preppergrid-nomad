@@ -21,6 +21,9 @@ MACOS_PLIST_SOURCE="${SCRIPT_DIR}/com.preppergrid.nomad.agent.plist"
 script_option_debug='true'
 accepted_terms='false'
 local_ip_address=''
+generated_app_key=''
+generated_db_root_password=''
+generated_db_user_password=''
 
 header() {
   if [[ "${script_option_debug}" != 'true' ]]; then clear; clear; fi
@@ -80,11 +83,13 @@ check_is_debug_mode(){
 }
 
 generateRandomPass() {
-  local length="${1:-32}"  # Default to 32
   local password
   
-  # Generate random password using /dev/urandom
-  password=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "$length")
+  password=$(openssl rand -hex 16)
+  if [[ -z "$password" ]] || [[ ${#password} -lt 16 ]]; then
+    echo "ERROR: Failed to generate secure password. Aborting."
+    exit 1
+  fi
   
   echo "$password"
 }
@@ -105,6 +110,97 @@ check_docker_compose() {
     echo -e "${YELLOW}#${RESET} Please read the Docker documentation at https://docs.docker.com/compose/install/ for instructions on how to install Docker Compose v2."
     exit 1
   fi
+}
+
+substitute_compose_env_value() {
+  local compose_file="$1"
+  local key="$2"
+  local value="$3"
+
+  if [[ -z "$value" ]]; then
+    echo "ERROR: $key value is empty. Aborting."
+    exit 1
+  fi
+
+  python3 -c "
+import re, sys
+key = sys.argv[1]
+value = sys.argv[2]
+path = sys.argv[3]
+with open(path, 'r') as f:
+    content = f.read()
+content = re.sub(r'(' + re.escape(key) + r'=)\\S*', lambda match: match.group(1) + value, content)
+with open(path, 'w') as f:
+    f.write(content)
+" "$key" "$value" "$compose_file"
+}
+
+validate_env_values() {
+  local compose_file="$1"
+  local required_keys=("APP_KEY" "DB_PASSWORD" "MYSQL_PASSWORD" "MYSQL_ROOT_PASSWORD")
+  local key
+  local value
+
+  for key in "${required_keys[@]}"; do
+    value=$(grep "^      - ${key}=" "$compose_file" | cut -d= -f2)
+    if [[ -z "$value" ]] || [[ "$value" == "replaceme" ]]; then
+      echo "ERROR: $key is empty or not substituted in $compose_file. Aborting."
+      exit 1
+    fi
+  done
+  echo "# All required environment values validated successfully."
+}
+
+wait_for_mariadb_health() {
+  local max_attempts=12
+  local attempt=0
+  local health_status=''
+
+  echo "# Waiting for MariaDB healthcheck..."
+  while [[ $attempt -lt $max_attempts ]]; do
+    attempt=$((attempt + 1))
+    health_status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' nomad_mysql 2>/dev/null || echo "missing")
+    if [[ "$health_status" == "healthy" ]]; then
+      echo "# MariaDB is ${health_status}."
+      return 0
+    fi
+    echo "# MariaDB healthcheck attempt ${attempt}/${max_attempts}: ${health_status}"
+    sleep 5
+  done
+
+  echo "ERROR: MariaDB did not become healthy. Aborting."
+  exit 1
+}
+
+verify_database_user() {
+  local root_password="$1"
+  local db_password="$2"
+  local max_attempts=12
+  local attempt=0
+  local user_exists
+
+  echo "# Verifying database user..."
+  while [[ $attempt -lt $max_attempts ]]; do
+    attempt=$((attempt + 1))
+    user_exists=$(docker exec nomad_mysql mariadb -u root -p"${root_password}" \
+      -e "SELECT COUNT(*) FROM mysql.user WHERE user='nomad_user';" \
+      --skip-column-names 2>/dev/null || echo "0")
+    user_exists="${user_exists//[[:space:]]/}"
+    if [[ "$user_exists" == "1" ]]; then
+      echo "# Database user nomad_user verified."
+      return 0
+    fi
+    sleep 5
+  done
+
+  echo "# nomad_user not found. Creating manually..."
+  docker exec nomad_mysql mariadb -u root -p"${root_password}" -e "
+    CREATE DATABASE IF NOT EXISTS nomad;
+    CREATE USER IF NOT EXISTS 'nomad_user'@'%' IDENTIFIED BY '${db_password}';
+    GRANT ALL PRIVILEGES ON nomad.* TO 'nomad_user'@'%';
+    FLUSH PRIVILEGES;
+  "
+  echo "# Database user created successfully."
 }
 
 setup_metal_notice() {
@@ -196,9 +292,9 @@ download_management_compose_file() {
   run_with_optional_sudo cp "$MACOS_COMPOSE_SOURCE" "$compose_file_path"
   echo -e "${GREEN}#${RESET} Docker compose file installed successfully to $compose_file_path.\\n"
 
-  local app_key=$(generateRandomPass)
-  local db_root_password=$(generateRandomPass)
-  local db_user_password=$(generateRandomPass)
+  generated_app_key=$(generateRandomPass)
+  generated_db_root_password=$(generateRandomPass)
+  generated_db_user_password=$(generateRandomPass)
 
   if [[ -d "${NOMAD_DIR}/mysql" ]]; then
     echo -e "${YELLOW}#${RESET} Removing existing MySQL data directory to ensure credentials match...\\n"
@@ -206,12 +302,12 @@ download_management_compose_file() {
   fi
 
   echo -e "${YELLOW}#${RESET} Configuring docker-compose file env variables...\\n"
-  sed -i '' "s|URL=replaceme|URL=http://${local_ip_address}:8080|g" "$compose_file_path"
-  sed -i '' "s|APP_KEY=replaceme|APP_KEY=${app_key}|g" "$compose_file_path"
-  
-  sed -i '' "s|DB_PASSWORD=replaceme|DB_PASSWORD=${db_user_password}|g" "$compose_file_path"
-  sed -i '' "s|MYSQL_ROOT_PASSWORD=replaceme|MYSQL_ROOT_PASSWORD=${db_root_password}|g" "$compose_file_path"
-  sed -i '' "s|MYSQL_PASSWORD=replaceme|MYSQL_PASSWORD=${db_user_password}|g" "$compose_file_path"
+  substitute_compose_env_value "$compose_file_path" "URL" "http://${local_ip_address}:8080"
+  substitute_compose_env_value "$compose_file_path" "APP_KEY" "$generated_app_key"
+  substitute_compose_env_value "$compose_file_path" "DB_PASSWORD" "$generated_db_user_password"
+  substitute_compose_env_value "$compose_file_path" "MYSQL_ROOT_PASSWORD" "$generated_db_root_password"
+  substitute_compose_env_value "$compose_file_path" "MYSQL_PASSWORD" "$generated_db_user_password"
+  validate_env_values "$compose_file_path"
   
   echo -e "${GREEN}#${RESET} Docker compose file configured successfully.\\n"
 }
@@ -290,4 +386,6 @@ generate_compose_env_file
 download_helper_scripts
 download_management_compose_file
 start_management_containers
+wait_for_mariadb_health
+verify_database_user "$generated_db_root_password" "$generated_db_user_password"
 success_message
