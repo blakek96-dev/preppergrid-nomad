@@ -1,0 +1,23 @@
+{
+  "requiredTopLevelKeys": [
+    "diskLayout",
+    "fsSize"
+  ],
+  "fsSizeRequiredKeys": [
+    "fs",
+    "size",
+    "used",
+    "available",
+    "use",
+    "mount"
+  ],
+  "fsSizeTypes": {
+    "fs": "string",
+    "size": "integer_positive",
+    "used": "integer_positive",
+    "available": "integer_positive",
+    "use": "integer_percent",
+    "mount": "string_non_empty"
+  },
+  "diskLayout": "not_null"
+}
