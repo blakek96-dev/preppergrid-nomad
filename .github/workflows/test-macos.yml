@@ -1,0 +1,42 @@
+name: macOS Fork Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate test syntax and fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tests/test_installer.sh
+          bash -n tests/test_disk_collector.sh
+          bash -n tests/test_compose.sh
+          bash -n tests/test_launchd.sh
+          bash -n tests/test_integration.sh
+          bash -n tests/run_all.sh
+          python3 -m json.tool tests/fixtures/expected_disk_schema.json >/dev/null
+
+      - name: Run macOS test suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests/run_all.sh
