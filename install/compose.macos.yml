@@ -24,7 +24,7 @@ services:
       - NODE_ENV=production
       - PORT=8080
       - LOG_LEVEL=info
-      - APP_KEY=yvcMhUkn6hJj0OvrFMujFOgWS5EmU2Y4ZFtaDid27cQ=
+      - APP_KEY=REPLACEME
       - HOST=0.0.0.0
       - URL=replaceme
       - DB_HOST=mysql
